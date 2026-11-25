@@ -1,0 +1,15 @@
+.git
+.github
+.husky
+.superpowers
+.env
+.env.*
+!.env.example
+node_modules
+dist
+coverage
+test
+src/**/*.test.ts
+src/**/*.integration-test.ts
+src/**/*.e2e-test.ts
+npm-debug.log*

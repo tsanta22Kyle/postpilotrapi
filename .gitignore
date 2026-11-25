@@ -1,5 +1,6 @@
 # compiled output
 /dist
+/packages/typescript-client/dist
 /node_modules
 /build
 

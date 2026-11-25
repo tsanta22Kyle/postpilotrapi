@@ -27,9 +27,16 @@ A route handler can return a web `Response`, a `ReadableStream` or an async gene
 
 Nest's packages are ESM only, and this project is ESM too: relative imports end in `.js`, `__dirname` doesn't exist (use `import.meta.dirname`), and tests run on Vitest, so mocks are `vi.fn()`, not `jest.fn()`.
 
-In this project, `src/main.ts` creates the app and listens on `PORT` (3000 by default), `src/app.module.ts` is the root module that imports the others, and `AppController` and `AppService` are samples. Unit tests sit beside the code as `*.spec.ts` and the e2e test is in `test/`; Vitest runs them (`npm test`, `npm run test:e2e`).
+In this project, `src/main.ts` creates the app and listens on `PORT` (3000 by default), `src/app.module.ts` is the root module that imports the others, and `AppController` and `AppService` are samples. Unit tests sit beside the code as `*.test.ts`, integration tests use `*.integration-test.ts`, and e2e tests use `*.e2e-test.ts` in `test/`; Vitest runs them (`npm run test:unit`, `npm run test:integration`, `npm run test:e2e`).
 
 When a task says how to test, follow it. When it says nothing, cover the behaviour you change with focused tests rather than adding broad e2e suites.
+
+## Changelog and package release notes
+
+- Update the root `CHANGELOG.md` for every substantive repository change, including features, bug fixes, refactors, tests, dependency/configuration/CI changes, documentation, and other maintenance. Add entries under `Unreleased` in the appropriate category. A changelog-only edit does not need another changelog entry.
+- Keep entries concise and user- or maintainer-facing. Do not silently rewrite released history; correct historical entries only when they are inaccurate.
+- Use scoped Conventional Commit pull request titles. Changes affecting `API.yml` or `packages/typescript-client/**` must use scope `api` or `client`; CI will reject other scopes for these paths. `feat` requests a minor client release, `fix`/`perf` request a patch, and `!` or `BREAKING CHANGE` requests a major release. Other scopes do not publish the client.
+- Before completing work, confirm the relevant `CHANGELOG.md` entry exists. CI will require a changelog update for substantive pull requests and a Conventional Commit title for all pull requests; if either is missing, the pull request check must fail with instructions to add it.
 
 ## Production data: NestJS Observe
 

@@ -1,0 +1,30 @@
+{
+  "name": "@tsanta22kyle/postpilotr-client",
+  "version": "0.1.0",
+  "description": "Generated TypeScript client for the PostPilotR API",
+  "license": "UNLICENSED",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tsanta22Kyle/postpilotrapi.git",
+    "directory": "packages/typescript-client"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "scripts": {
+    "generate": "openapi-ts && prettier --write src/generated",
+    "build": "npm run generate && tsc -p tsconfig.json",
+    "release": "semantic-release",
+    "prepack": "npm run build"
+  }
+}

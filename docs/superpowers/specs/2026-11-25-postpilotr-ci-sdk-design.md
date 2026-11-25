@@ -9,6 +9,7 @@ Establish dependable pull request checks for the NestJS backend and provide the 
 - Run unit, integration, and e2e checks as separately visible CI jobs.
 - Check code quality and formatting on pull requests.
 - Format staged files automatically through Husky and lint-staged before they are committed.
+- Maintain a root backend changelog for every substantive change and block pull requests that omit an entry.
 - Add DeepSource static analysis, including security analysis, to pull request review.
 - Build and publish a versioned private TypeScript client automatically for frontend consumers.
 - Build and publish a versioned backend container image to GitHub Container Registry (GHCR).
@@ -27,6 +28,7 @@ Establish dependable pull request checks for the NestJS backend and provide the 
 - GitHub repository: `tsanta22Kyle/postpilotrapi`; active branch observed as `infra/base`.
 - ESM TypeScript project using NodeNext and TypeScript 6.
 - Existing scripts: `test`, `test:e2e`, `lint`, and write-mode `format`.
+- The root `CHANGELOG.md` is the backend-wide history; client versions and release notes will be generated from Conventional Commits by semantic-release.
 - `vitest.config.ts` selects `*.test.ts`; `vitest.config.e2e.ts` selects `*.e2e-test.ts`.
 - Current test files are `src/app.controller.test.ts` and `test/app.e2e-test.ts`; both match their respective Vitest configuration patterns.
 - The only current tests cover the starter greeting; there is no integration-specific configuration or test.
@@ -39,7 +41,7 @@ Establish dependable pull request checks for the NestJS backend and provide the 
 2. **One workflow file per gate.** Each check and package publishing flow is isolated in its own file. This is easy to navigate by subsystem but repeats Node setup, cache, permissions, and triggers, and can create redundant runs.
 3. **One monolithic CI job.** All commands run sequentially in a single job, with DeepSource separately integrated. This minimizes YAML but hides which gate failed and prevents independent scheduling; it does not meet the desired visibility as well.
 
-Recommendation: approach 1, using independent GitHub Actions jobs for the requested checks and DeepSource as a provider-managed PR check. Use immutable action revisions when implementing and grant package write permission only to the release publisher.
+Recommendation: approach 1, using independent GitHub Actions jobs for the requested checks and DeepSource as a provider-managed PR check. Use Conventional Commit PR titles, squash merging, semantic-release with `api`/`client` release scopes, and grant package write permission only to the release publisher.
 
 ## Proposed Design
 
@@ -52,6 +54,7 @@ Create a GitHub Actions validation workflow for pull requests and pushes to the 
 - **E2E:** existing `test:e2e` command against the Nest application over HTTP, with files named `*.e2e-test.ts` to match the current config.
 - **Quality:** Oxlint and TypeScript/build validation (exact division to avoid redundant expensive work is an implementation detail).
 - **Format:** Prettier check mode, separate from the existing write-mode `format` script.
+- **Changelog/release-note policy:** require a meaningful `CHANGELOG.md` diff for each substantive pull request. Validate Conventional Commit title syntax for all PRs and require scope `api` or `client` when `API.yml` or `packages/typescript-client/**` changes. The changelog check must require an added entry under `Unreleased`, not merely any edit to the file, and explain how to add missing information; changelog-only changes are exempt from recursively requiring another entry.
 
 Each job should report independently. Branch protection/check requirements are a repository setting and need to be enabled after the workflow names exist.
 
@@ -69,11 +72,13 @@ Add a workspace package (proposed path `packages/typescript-client`) with its ow
 
 Publish the package to GitHub Packages under the repository owner scope only after a pull request has been merged into the exact target branch `preproduction` or `production`. Trigger on closed pull requests targeting either branch and require `pull_request.merged == true`; do not publish for PR updates, closures without merge, or merges to other branches. Configure both branch names now; the workflow must also work when `production` is created later.
 
-Use Changesets for package-specific SemVer, changelogs, and a reviewable release/version PR. Merges to `preproduction` publish a unique prerelease version such as `1.2.0-rc.1` under the npm dist-tag `preproduction`. Merges to `production` publish stable versions such as `1.2.0` under `latest`. The two branch lines must never try to overwrite an already-published package version. Create corresponding package-specific Git tags/release notes, for example `typescript-client-v1.2.0-rc.1` and `typescript-client-v1.2.0`. The workflow must build and inspect the package, use `GITHUB_TOKEN` with only `contents: read` and `packages: write`, and safely skip/reconcile an already-published version on rerun. Document frontend `.npmrc` authentication, installation, package naming/scope, dist-tags, and version/release procedure. Publishing to a separate npmjs.org organization or registry is outside this proposal unless requested.
+Use Conventional Commit titles as the release input and semantic-release to compute SemVer, generate GitHub release notes, publish the package, and create a version tag. `feat(api):` / `feat(client):` requests a minor release; `fix(api):`, `fix(client):`, and matching `perf` commits request a patch; breaking `!` or `BREAKING CHANGE` with either scope requests a major. All other scopes are explicitly ignored so backend-only changes do not publish the client. PRs touching the API contract or generated client must use one of the two release scopes. Require squash merge so the PR title becomes the commit semantic-release analyzes.
+
+Configure semantic-release with `preproduction` as a release branch using npm channel `preproduction`, and `production` as the default stable channel. This is deliberate: semantic-release requires at least one existing release branch, so a prerelease branch alone cannot publish while `production` is absent. The preproduction workflow therefore publishes ordinary SemVer versions to the isolated `preproduction` dist-tag; when the version reaches `production`, semantic-release promotes it to `latest`. Git tags use `typescript-client-v<version>` and the GitHub plugin creates GitHub Releases. Configure the package's `publishConfig.registry` as `https://npm.pkg.github.com`; do not set `private: true` on the publishable package. The client-release workflow must trigger only for merged PRs targeting either exact branch name and run validation/build first. It uses `GITHUB_TOKEN` with narrowly scoped `contents: write` and `packages: write` permissions. Document frontend `.npmrc` authentication, installation and release conventions. Publishing to npmjs.org is outside this proposal.
 
 ### Backend container publication to GHCR
 
-Add a backend `Dockerfile` suitable for a production NestJS build, with a non-root runtime and only production runtime files/dependencies in the final image. Add a container workflow that builds and publishes to `ghcr.io/tsanta22kyle/postpilotrapi` after required validation, using immutable commit-SHA tags and release version tags. Use the workflow `GITHUB_TOKEN` with package write permission only in the publishing job. Do not deploy or start the container in a production environment as part of this work.
+Add a backend `Dockerfile` suitable for a production NestJS build, with a non-root runtime and only production runtime files/dependencies in the final image. Add a container workflow that builds and publishes to `ghcr.io/tsanta22kyle/postpilotrapi` after required validation, using immutable commit-SHA tags and moving `preproduction` or `latest` channel tags. Use the workflow `GITHUB_TOKEN` with package write permission only in the publishing job. Do not deploy or start the container in a production environment as part of this work.
 
 Add a root `API.yml` as an explicitly placeholder OpenAPI contract. It must identify the application name and current application version in `info.title` and `info.version`, and define no endpoint paths. Include only the additional OpenAPI structure required for a valid document (`openapi` version and an empty `paths` object). Mark it as non-contractual until real endpoints are described. The container and client package version should derive from one documented source of truth, proposed as the root `package.json` version, avoiding hand-maintained drift with `API.yml`.
 
@@ -85,9 +90,9 @@ Update README with local check commands, test categories and naming conventions,
 
 - Client location: `packages/typescript-client` in this repository (default; confirm).
 - Registry: GitHub Packages (default; confirm whether the frontend can authenticate to this registry).
-- Client publish trigger: only after a PR is merged into `preproduction` or `production`; preproduction publishes `-rc.N` versions with the `preproduction` dist-tag, production publishes stable versions with `latest`.
+- Client publish trigger: only after a PR is merged into `preproduction` or `production`; Conventional Commit titles scoped `api` or `client` determine whether and how semantic-release publishes a release. `preproduction` is a normal SemVer release on its isolated npm dist-tag so it can work before `production` exists; `production` promotes the version to `latest`.
 - Backend image registry: GHCR at `ghcr.io/tsanta22kyle/postpilotrapi` (proposed from the repository owner/name).
-- Image publish trigger: validated release tags; publishing SHA-tagged images on default-branch commits is optional and should be confirmed.
+- Image publish trigger: validated merged PRs to `preproduction`/`production`, tagged with immutable commit SHA and the matching moving channel tag.
 - Hook timing: Husky `pre-commit` formats staged files with lint-staged; CI checks formatting in verify-only mode. This avoids a push hook changing files after commit.
 - Integration-test target: define a separate `*.integration-test.ts` category now, but add substantive fixtures only when an actual integration boundary exists (default).
 - Node runtime: use the currently supported LTS line and pin consistently; choose exact major during implementation based on the project's deployment runtime (currently unspecified).
@@ -100,6 +105,8 @@ Update README with local check commands, test categories and naming conventions,
 - A release publishes a built, versioned private client package only after validation, without granting package-write permissions to ordinary checks.
 - A validated release publishes a production backend image to GHCR with its version tag.
 - Root `API.yml` parses as OpenAPI and contains application title/version with no endpoint paths, clearly marked as a placeholder.
+- The root `CHANGELOG.md` is updated for every substantive change; CI fails with a clear message when a pull request omits it.
+- CI fails with a clear message when PR titles are not Conventional Commits, when API/client changes lack an `api`/`client` scope, or when release scope syntax would not produce the intended bump.
 - Committing staged TypeScript or supported config files runs lint-staged Prettier formatting; CI still rejects unformatted content.
 - A frontend contributor can authenticate, install, import, and build against the package using documented steps.
 - Local README commands match CI behavior; existing developer edits in `package-lock.json` remain untouched.
