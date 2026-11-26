@@ -1,0 +1,68 @@
+name: Publish backend container
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [preproduction, production]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate merged backend
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Recheck merged pull request title and changelog
+        run: node scripts/pr-policy.mjs
+        env:
+          GITHUB_BASE_SHA: ${{ github.event.pull_request.merge_commit_sha }}^
+          GITHUB_HEAD_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+      - run: npm run test:policy
+      - run: npm run test:unit
+      - run: npm run test:integration
+      - run: npm run test:e2e
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run build
+
+  publish:
+    name: Build and push GHCR image
+    needs: validate
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/tsanta22kyle/postpilotrapi
+          tags: |
+            type=sha,format=long
+            type=raw,value=preproduction,enable=${{ github.event.pull_request.base.ref == 'preproduction' }}
+            type=raw,value=latest,enable=${{ github.event.pull_request.base.ref == 'production' }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

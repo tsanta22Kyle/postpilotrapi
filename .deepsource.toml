@@ -1,0 +1,34 @@
+version = 1
+
+test_patterns = [
+  "src/**/*.test.ts",
+  "src/**/*.integration-test.ts",
+  "test/**/*.e2e-test.ts",
+  "scripts/**/*.test.mjs",
+]
+
+exclude_patterns = [
+  "node_modules/**",
+  "dist/**",
+  "coverage/**",
+  "packages/typescript-client/src/generated/**",
+]
+
+[[analyzers]]
+name = "javascript"
+enabled = true
+
+  [analyzers.meta]
+  environment = ["nodejs", "vitest"]
+  module_system = "es-modules"
+  dialect = "typescript"
+  dependency_file_paths = [
+    "package.json",
+    "tsconfig.json",
+    "packages/typescript-client/package.json",
+    "packages/typescript-client/tsconfig.json",
+  ]
+
+[[analyzers]]
+name = "docker"
+enabled = true

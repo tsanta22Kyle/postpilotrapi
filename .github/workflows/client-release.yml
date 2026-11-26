@@ -1,0 +1,49 @@
+name: TypeScript client release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [preproduction, production]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Validate and publish client
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://npm.pkg.github.com
+          scope: '@tsanta22kyle'
+      - run: npm ci
+      - name: Recheck merged pull request title and changelog
+        run: node scripts/pr-policy.mjs
+        env:
+          GITHUB_BASE_SHA: ${{ github.event.pull_request.merge_commit_sha }}^
+          GITHUB_HEAD_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+      - run: npm run test:policy
+      - run: npm run test:unit
+      - run: npm run test:integration
+      - run: npm run test:e2e
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run build
+      - run: npm run client:check-generated
+      - run: npm run client:build
+      - name: Publish release when Conventional Commits request a client version
+        run: npm run release --workspace @tsanta22kyle/postpilotr-client -- --no-ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
